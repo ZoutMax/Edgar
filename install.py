@@ -182,18 +182,31 @@ def write_config(home, name, monitor):
         say("wrote pending.txt, which the greeting draws from")
 
 
+# "ok" on release, and "one moment" when the model is not loaded yet. The
+# second one matters most on a FIRST run, when the model is still downloading
+# and the wait is minutes rather than seconds: without it a held recording is
+# indistinguishable from a dead button.
+CUES = (("ack", None, "the spoken acknowledgement"),
+        ("wait", "one moment", "the please-wait cue"))
+
+
 def render_ack(py, home):
     env = dict(os.environ, EDGAR_HOME=home)
     for mode in ("edgar", "paky"):
-        say("rendering the spoken acknowledgement for %s" % mode)
-        result = subprocess.run(
-            [py, "-I", os.path.join(SCRIPTS, "make-ack.py"), "--mode", mode],
-            env=env, capture_output=True, text=True)
-        if result.returncode:
-            detail = (result.stderr or result.stdout).strip().splitlines()
-            say("  could not render it: %s" % (detail[-1][:150] if detail else "?"))
-        else:
-            written.append(os.path.join(home, "ack-%s.wav" % mode))
+        for kind, phrase, label in CUES:
+            say("rendering %s for %s" % (label, mode))
+            cmd = [py, "-I", os.path.join(SCRIPTS, "make-ack.py"),
+                   "--mode", mode,
+                   "--out", os.path.join(home, "%s-%s.wav" % (kind, mode))]
+            if phrase:
+                cmd += ["--phrase", phrase]
+            result = subprocess.run(cmd, env=env, capture_output=True, text=True)
+            if result.returncode:
+                detail = (result.stderr or result.stdout).strip().splitlines()
+                say("  could not render it: %s"
+                    % (detail[-1][:150] if detail else "?"))
+            else:
+                written.append(os.path.join(home, "%s-%s.wav" % (kind, mode)))
 
 
 def register_tasks(py, home, monitor, elevated):

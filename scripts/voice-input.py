@@ -721,14 +721,22 @@ _ACK_RETRY = {}            # path -> when to look for a missing file again
 ACK_RETRY_S = 60.0
 
 
-def _ack_path():
-    """ack-edgar.wav or ack-paky.wav, following the current mode."""
+def _ack_path(kind="ack"):
+    """ack-edgar.wav, wait-paky.wav and so on, following the current mode.
+
+    kind="ack"  - "ok", the instant the button is released
+    kind="wait" - "one moment", when the model is not loaded yet and the
+                  recording is being held. Without it the hold is SILENT and
+                  reads as a hang: the first time it happened for real the
+                  recording was safe for 43 s, and the only reasonable thing
+                  to think was that the button had stopped working.
+    """
     try:
         with open(VOICE_MODE_FILE, encoding="utf-8") as f:
             mode = f.read().strip().lower()
     except Exception:
         mode = ""
-    return os.path.join(HOME, "ack-%s.wav" % (mode or "edgar"))
+    return os.path.join(HOME, "%s-%s.wav" % (kind, mode or "edgar"))
 
 
 def _load_ack(path):
@@ -789,7 +797,7 @@ def _wake_edgar(env, text):
     t.start()
 
 
-def say_ack(out_idx):
+def say_ack(out_idx, kind="ack"):
     """Play the pre-rendered acknowledgement, on RELEASE of the button.
 
     The daemon round trip logged itself as spoken and still was not audible, and
@@ -803,7 +811,7 @@ def say_ack(out_idx):
     """
     if not ACK_ENABLED:
         return False
-    path = _ack_path()
+    path = _ack_path(kind)
     if _ACK_CACHE.get(path, 1) is None and time.time() >= _ACK_RETRY.get(path, 0):
         del _ACK_CACHE[path]               # look for the file again
     if path not in _ACK_CACHE:
@@ -818,7 +826,8 @@ def say_ack(out_idx):
             # no effect until the listener was restarted.
             _ACK_CACHE[path] = None
             _ACK_RETRY[path] = time.time() + ACK_RETRY_S
-            log("no %s - run: python make-ack.py" % os.path.basename(path))
+            log("no %s - run: python make-ack.py --phrase ... --out %s"
+                % (os.path.basename(path), os.path.basename(path)))
         except Exception as e:
             _ACK_CACHE[path] = None
             log("ack could not be loaded: %s" % e)
@@ -843,6 +852,13 @@ def main():
     ap.add_argument("--model", default=MODEL_NAME)
     ap.add_argument("--window", default=TARGET_WINDOW)
     ap.add_argument("--no-submit", action="store_true", help="paste but do not press Enter")
+    # On a first run the model is DOWNLOADED, and after a reboot it comes off
+    # cold disk; a press during either is meant to be HELD rather than lost.
+    # Once it is in the page cache it loads in a second, so that path is
+    # unreachable in normal use - this makes it testable on demand.
+    ap.add_argument("--delay-model", type=float, default=0.0,
+                    metavar="SECONDS",
+                    help="delay the model load, to test the warm-up hold path")
     args = ap.parse_args()
     echo = args.debug
 
@@ -873,6 +889,10 @@ def main():
     def load_model():
         t0 = time.time()
         try:
+            if args.delay_model > 0:
+                log("--delay-model %.0fs: holding the model back on purpose, the"
+                    " talk button is live NOW" % args.delay_model, True)
+                time.sleep(args.delay_model)
             _model[0] = WhisperModel(args.model, device="cpu", compute_type="int8",
                                      download_root=MODEL_DIR)
             log("model ready in %.1fs" % (time.time() - t0), echo)
@@ -1089,6 +1109,7 @@ def main():
                 # already captured, so it waits rather than being thrown away.
                 if not _model_ready.is_set():
                     log("model still loading - this recording is held, not lost", echo)
+                    say_ack(out_idx, "wait")
                     _model_ready.wait()
                 model = _model[0]
                 if model is None:

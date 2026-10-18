@@ -51,7 +51,8 @@ beeps when the microphone is genuinely live rather than when you pressed.
 The button is live the moment the listener starts. On the very first run the speech
 model is still downloading, and straight after a reboot it is still coming off cold
 disk — a press during either records as normal and only the transcription waits, so
-nothing you say is lost.
+nothing you say is lost. Edgar says **"one moment"** when that happens, because a
+held recording and a dead button are otherwise indistinguishable.
 
 To remove it all: `python uninstall.py` (add `--all` to delete the models too).
 
