@@ -862,11 +862,29 @@ def main():
         log("  the Claude Code console is elevated - UIPI will block typing"
             " unless this listener is elevated too", echo)
 
+    # Whisper is needed to TRANSCRIBE, not to record, so it loads on a thread
+    # and the talk button goes live at once. Straight after a reboot the model
+    # comes off cold disk and takes half a minute: loading it inline left the
+    # button dead for the first two minutes, with the hook not yet installed
+    # and nothing to say so. A press during the warm-up now records as usual
+    # and only the transcription waits.
     from faster_whisper import WhisperModel
-    t0 = time.time()
-    model = WhisperModel(args.model, device="cpu", compute_type="int8",
-                         download_root=MODEL_DIR)
-    log("model ready in %.1fs - hold the middle mouse button to talk" % (time.time() - t0), echo)
+    _model = [None]
+    _model_ready = threading.Event()
+
+    def load_model():
+        t0 = time.time()
+        try:
+            _model[0] = WhisperModel(args.model, device="cpu", compute_type="int8",
+                                     download_root=MODEL_DIR)
+            log("model ready in %.1fs" % (time.time() - t0), echo)
+        except Exception as e:
+            log("MODEL FAILED to load: %s - recording still works but nothing"
+                " can be transcribed; restart the listener" % e, True)
+        finally:
+            _model_ready.set()
+
+    threading.Thread(target=load_model, daemon=True).start()
 
     down_since = None
     recording = False
@@ -883,8 +901,9 @@ def main():
     last_scan = time.time()
 
     if start_mouse_hook():
-        log("mouse hook installed - the talk click is swallowed over the taskbar "
-            "and the desktop, and passed through everywhere else", echo)
+        log("mouse hook installed - hold the middle mouse button to talk. The "
+            "click is swallowed over the taskbar and the desktop, and passed "
+            "through everywhere else", echo)
     else:
         log("mouse hook FAILED to install - falling back to polling, so the click "
             "still reaches whatever is under the pointer", echo)
@@ -1068,6 +1087,18 @@ def main():
                         log("wav dump failed: %s" % e)
 
                 t0 = time.time()
+                # Only reached while the model is still warming up, which in
+                # practice means the first press after a reboot. The audio is
+                # already captured, so it waits rather than being thrown away.
+                if not _model_ready.is_set():
+                    log("model still loading - this recording is held, not lost", echo)
+                    _model_ready.wait()
+                model = _model[0]
+                if model is None:
+                    log("no model loaded - the audio is kept but cannot be"
+                        " transcribed", True)
+                    beep(out_idx, 300)
+                    continue
                 # speech_pad_ms keeps the VAD from shaving the consonant off the first
                 # word; condition_on_previous_text=False stops it inventing a
                 # continuation of the last utterance; temperature=0 = no sampling.

@@ -48,6 +48,11 @@ Then **hold the middle mouse button, wait for the beep, speak, and release.** Th
 beep matters: a Bluetooth microphone is deaf for its first half-second, so Edgar
 beeps when the microphone is genuinely live rather than when you pressed.
 
+The button is live the moment the listener starts. On the very first run the speech
+model is still downloading, and straight after a reboot it is still coming off cold
+disk — a press during either records as normal and only the transcription waits, so
+nothing you say is lost.
+
 To remove it all: `python uninstall.py` (add `--all` to delete the models too).
 
 ## Configuration
