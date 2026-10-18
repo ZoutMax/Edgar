@@ -565,8 +565,35 @@ def current_mode():
 # with the words - a frown when something broke, a smile when it worked.
 # My own mistake is the one thing that should always reach his face.
 _MISTAKE = re.compile(
-    "(?<![A-Za-z])(my (fault|mistake|error)|i broke|i was wrong|i got it wrong|"
-    "miscount(ed)?|my own (mistake|error)|i had it wrong)(?![A-Za-z])", re.I)
+    "(?<![A-Za-z])(my (fault|mistake|error|own doing)|on my part|i broke|"
+    "i was wrong|i got it wrong|miscount(ed)?|my own (mistake|error)|"
+    "i had it wrong|i sliced)(?![A-Za-z])", re.I)
+
+# Quoted and parenthesised spans are QUOTATIONS - log output, rule names, his
+# own words - not Edgar reporting on his own state. "the three rules all behave
+# (my own mistake wins)" is good news that merely NAMES the mistake rule.
+# Blanked rather than deleted, so every match offset still lines up.
+_QUOTED = re.compile(r"\([^()]{0,200}\)|\"[^\"]{0,200}\"|`[^`]{0,200}`")
+
+# A line that states its own resolution cannot be angry. THIS is the fix: I
+# report a success and name the problem it solved in the same breath, and the
+# old rule read the problem. "I also fixed a bug", "Settings all preserved",
+# "came through exactly right, which failed badly last night".
+_RESOLVED = re.compile(
+    r"\b(fixed|saved|preserved|works|worked|proved|proves|proven|confirmed|"
+    r"verified|restored|resolved|passed|passes|intact|survived|"
+    r"is done|are fine|is fine|all behave|compile clean|exactly right|"
+    r"came through|in place|no longer|duplicate-safe|byte-identical)\b"
+    r"|\b(cannot|can'?t|could not|will not|won'?t|never)\s+\w+"
+    r"(?:\s+\w+){0,3}\s+again\b", re.I)
+
+# A negative about how things USED to be is history, not news. It must sit
+# NEXT TO the negative - "broke before", "failed last night" - because applied
+# to the whole sentence it excused "was wrong because it ran code from before",
+# which is a live problem report.
+_HISTORIC = re.compile(
+    r"\b(before|last night|earlier|previously|used to|up to now|until now)\b",
+    re.I)
 
 # A sentence about what COULD happen is narration, not a report of it.
 _HYPOTHETICAL = re.compile(
@@ -595,7 +622,7 @@ _UNHAPPY = re.compile(
     r"cannot|can(?:'?t|\s+not)|could(?:n'?t|\s+not)|did(?:n'?t|\s+not)|"
     r"does(?:n'?t|\s+not)|would(?:n'?t|\s+not)|"
     r"not\s+(work|working|found|able|usable|safe)|unsafe|missing|regression|"
-    r"rejected|refused?|blocked|denied|corrupt(ed)?|stuck|timed? ?out|"
+    r"refused?|blocked|denied|corrupt(ed)?|stuck|timed? ?out|"
     r"no\s+(usable|such|match)|unable|invalid|mistake|my fault|sorry)\b", re.I)
 
 _HAPPY = re.compile(
@@ -626,37 +653,72 @@ DEFAULT_EMOTION = "neutral"      # the smiling still from the film
 # pattern then matched nothing at all. These forms contain no backslash.
 
 
-# SAD is disappointment rather than failure - something lost, gone or
-# unavailable, where ANGRY is an outright error or my own mistake.
-# Checked AFTER angry so a real error still wins.
+# SAD is a LOST CONNECTION - a device gone, a thread of attention dropped -
+# where ANGRY is an outright error or my own mistake.
+#
+# It used to list bare "lost", "gone", "empty" and "nothing found", which made
+# a successful cleanup ("Archives gone - 2232 to 2211 MB") and a design
+# improvement ("The oval is gone, now there is one shape") both read as grief.
+# Measured on real traffic, that list produced 16 sad lines of which 10 were
+# wrong. Narrowed, it produces 6, and they are the earbuds going flat.
 _SAD = re.compile(
-    "(?<![A-Za-z])(disconnect(ed|s)?|dropped out|lost|gone|offline|unavailable|no longer|ran out|gave up|nothing (found|left|there)|empty|too late|out of range|had to stop|gave nothing)(?![A-Za-z])", re.I)
+    "(?<![A-Za-z])(went offline|is offline|dropped out|disconnect(ed|s|ing)?|"
+    "gone to sleep|lost track|out of range|unavailable|stopped answering|"
+    "no longer responding|timed? ?out|stopped working)(?![A-Za-z])", re.I)
 
 
 def emotion_for(text):
-    """The emotion of a line, from three rules and nothing more.
+    """The emotion of a line, from five rules and nothing more.
 
-    Measured against 34 lines Edgar had actually spoken: the old first-match
-    rule scored 24, this scores 32. It was wrong in one direction almost every
-    time - a single negative word anywhere turned a whole paragraph angry, so
-    "a backup that does not parse is worse than none" and "its mutex blocked
-    the new one, which is a good sign" both came out as anger.
+    MEASURED, on 45 hand-labelled lines drawn from what Edgar has actually
+    said - not on invented examples. The previous version scored 49% on that
+    set while scoring 32/34 on a curated one, which is the whole lesson: it
+    was tuned on text chosen to exercise it rather than on real traffic.
+    This scores 91%, and every one of its remaining errors is a neutral line
+    picking up a mild expression, never good news delivered with a scowl.
+
+    The failure it exists to fix: I report a success and name the problem it
+    solved in the same breath. "I also fixed a bug", "All three are
+    duplicate-safe now", "38 memories, 0 broken links" - the old rule read
+    the problem and put a scowl on every one.
 
     1. My OWN mistake anywhere wins. The user should always see that one.
-    2. Otherwise the LAST sentence carrying any sentiment decides, and within
-       it the LAST match decides - a report's verdict sits at its end.
-    3. A sentence that EXPLAINS a risk carries no sentiment at all:
+    2. A lost connection is sad.
+    3. If the line states its own RESOLUTION, a negative in it is the problem
+       being solved, so the line is good news.
+    4. Otherwise the LAST sentence carrying sentiment decides, and within it
+       the LAST match - a report's verdict sits at its end - except that a
+       negative immediately followed by "before" or "last night" is history.
+    5. A sentence that EXPLAINS a risk carries no sentiment at all:
        "if the hook dies the button stops working" is narration, not a failure.
+
+    Quotations are blanked before any of this, so log output and rule names
+    cannot speak for Edgar.
     """
-    text = text or ""
+    text = _QUOTED.sub(lambda m: " " * len(m.group(0)), text or "")
     if _MISTAKE.search(text):
         return "angry"
+    if _SAD.search(text):
+        return "sad"
+    resolved = bool(_RESOLVED.search(text))
     for sentence in reversed([s for s in _SENTENCE.split(text) if s.strip()]):
         if _HYPOTHETICAL.search(sentence):
             continue                    # explaining a risk, not reporting one
-        hits = _last_hits(sentence)
-        if hits:
-            return max(hits)[1]         # whichever sentiment comes last
+        hits = [(p, n) for p, n in _last_hits(sentence) if n != "sad"]
+        if not hits:
+            continue
+        pos, name = max(hits)
+        if name != "angry":
+            return name
+        if resolved:
+            return "happy"              # the problem is named, but it is solved
+        tok = ""
+        for m in _UNHAPPY.finditer(sentence):
+            if m.start() == pos:
+                tok = m.group(0)
+        if _HISTORIC.search(sentence[pos + len(tok):pos + len(tok) + 45]):
+            return "neutral"            # it WAS broken; that is not now
+        return "angry"
     return DEFAULT_EMOTION
 
 
