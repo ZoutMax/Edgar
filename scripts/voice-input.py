@@ -69,7 +69,10 @@ MIC_PREFS = tuple(CFG["mic_prefs"])        # first one that actually OPENS wins
                            # webcam is a plain microphone. Output stays on the speakerphone.
 OUT_PREFS = tuple(CFG["out_prefs"])        # where the beeps and the ack go
 DEVICE_POLL_S = 5.0        # re-resolve this often while idle, so a disconnect falls back
-TARGET_WINDOW = "Local Assistant"           # substring of the terminal's title
+# An OPTIONAL substring of the terminal's title. Leave it empty and Edgar
+# types into whichever terminal window it finds - as long as exactly one
+# qualifies. See find_window(): a title alone is not enough to trust.
+TARGET_WINDOW = CFG["target_window"]
 BEEP = True
 # Whisper decodes with a language model, so it guesses familiar words over
 # unfamiliar ones: "ANC" became "Active nose constellation", "restart" became
@@ -142,6 +145,20 @@ assert ctypes.sizeof(INPUT) == 40, "INPUT must be 40 bytes on x64, got %d" % cty
 
 user32.SendInput.argtypes = (wt.UINT, ctypes.POINTER(INPUT), ctypes.c_int)
 user32.SendInput.restype = wt.UINT
+
+# Used to confirm WHO owns the window before typing into it.
+kernel32.OpenProcess.argtypes = (wt.DWORD, wt.BOOL, wt.DWORD)
+kernel32.OpenProcess.restype = wt.HANDLE
+kernel32.QueryFullProcessImageNameW.argtypes = (
+    wt.HANDLE, wt.DWORD, wt.LPWSTR, ctypes.POINTER(wt.DWORD))
+kernel32.CloseHandle.argtypes = (wt.HANDLE,)
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+# Hosts a console can legitimately live in. Checked as well as the title,
+# because any window at all can call itself whatever it likes.
+TERMINAL_EXES = ("windowsterminal.exe", "powershell.exe", "pwsh.exe",
+                 "cmd.exe", "conhost.exe", "wezterm-gui.exe",
+                 "alacritty.exe", "python.exe", "node.exe")
 
 # --------------------------------------------------------------------------- the talk button
 # GetAsyncKeyState only READS the middle button - the click itself still travels
@@ -490,7 +507,37 @@ def beep(out_idx, freq, ms=90):
 
 # --------------------------------------------------------------- typing into the UI
 
+def _exe_of(hwnd):
+    """The image name of the process owning a window, lower case."""
+    pid = wt.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    if not pid.value:
+        return ""
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,
+                                  False, pid.value)
+    if not handle:
+        return ""
+    try:
+        buf = ctypes.create_unicode_buffer(512)
+        size = wt.DWORD(512)
+        if kernel32.QueryFullProcessImageNameW(handle, 0, buf,
+                                               ctypes.byref(size)):
+            return os.path.basename(buf.value).lower()
+        return ""
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def find_window(substr):
+    """The ONE terminal window to type into, or (None, None).
+
+    A title substring on its own is not safe enough to ship: any window can
+    call itself anything, so a window merely borrowing the name would collect
+    whatever is dictated. The OWNER has to be a terminal host as well, and if
+    more than one window still qualifies this REFUSES rather than guessing -
+    the caller then leaves the text on the clipboard instead of sending it
+    somewhere unintended.
+    """
     found = []
 
     @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
@@ -502,11 +549,19 @@ def find_window(substr):
             return True
         buf = ctypes.create_unicode_buffer(n + 1)
         user32.GetWindowTextW(hwnd, buf, n + 1)
-        if substr.lower() in buf.value.lower():
-            found.append((hwnd, buf.value))
+        if substr and substr.lower() not in buf.value.lower():
+            return True
+        if _exe_of(hwnd) not in TERMINAL_EXES:
+            return True
+        found.append((hwnd, buf.value))
         return True
 
     user32.EnumWindows(cb, 0)
+    if len(found) > 1:
+        log("%d terminal windows qualify (%s) - refusing to guess which one to "
+            "type into. Set target_window in config.json." %
+            (len(found), ", ".join(repr(t) for _, t in found[:4])))
+        return None, None
     return found[0] if found else (None, None)
 
 

@@ -74,7 +74,7 @@ TASK_XML = """<?xml version="1.0" encoding="UTF-16"?>
     <Principal id="Author">
       <UserId>{user}</UserId>
       <LogonType>InteractiveToken</LogonType>
-      <RunLevel>HighestAvailable</RunLevel>
+      <RunLevel>{runlevel}</RunLevel>
     </Principal>
   </Principals>
   <Settings>
@@ -196,7 +196,7 @@ def render_ack(py, home):
             written.append(os.path.join(home, "ack-%s.wav" % mode))
 
 
-def register_tasks(py, home, monitor):
+def register_tasks(py, home, monitor, elevated):
     pythonw = py.replace("python.exe", "pythonw.exe")
     user = "%s\\%s" % (os.environ.get("USERDOMAIN", ""),
                        os.environ.get("USERNAME", ""))
@@ -205,6 +205,8 @@ def register_tasks(py, home, monitor):
         if extra:
             arguments += " " + extra.format(monitor=monitor)
         xml = TASK_XML.format(description="Edgar: %s" % script, delay=delay,
+                              runlevel=("HighestAvailable" if elevated
+                                        else "LeastPrivilege"),
                               user=user, command=pythonw, arguments=arguments,
                               workdir=SCRIPTS)
         temp = os.path.join(home, "_task.xml")
@@ -266,6 +268,11 @@ def main():
     ap.add_argument("--name", default=None, help="what Edgar calls you")
     ap.add_argument("--monitor", default="left",
                     help="left | right | middle | primary, or an index")
+    ap.add_argument("--elevated", action="store_true",
+                    help="run the tasks with highest privileges. Needed ONLY if"
+                         " your Claude Code terminal is itself elevated, because"
+                         " Windows refuses input sent to a higher-privilege"
+                         " window. See the warning it prints.")
     ap.add_argument("--no-tasks", action="store_true")
     ap.add_argument("--no-hooks", action="store_true")
     ap.add_argument("--yes", action="store_true", help="ask nothing")
@@ -290,8 +297,15 @@ def main():
     fetch_models(home)
     write_config(home, name or "", args.monitor)
     render_ack(py, home)
+    if args.elevated:
+        say("NOTE: --elevated runs the tasks with highest privileges, and the")
+        say("      interpreter they run lives in a directory you can write to.")
+        say("      Anything able to write there would then run elevated without")
+        say("      a prompt. Only use it if your terminal is itself elevated,")
+        say("      and consider installing under Program Files if you do.")
+
     if not args.no_tasks:
-        register_tasks(py, home, args.monitor)
+        register_tasks(py, home, args.monitor, args.elevated)
     if not args.no_hooks:
         patch_hooks(py, home)
 

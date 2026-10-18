@@ -66,6 +66,7 @@ optional — with no config at all Edgar runs on defaults.
 | `monitor` | `left`, `right`, `middle`, `primary`, or an index. **Use a word** — indices shift when Windows re-detects displays |
 | `ack_phrase` | spoken the instant you release the button, so you know you were heard without waiting for the transcription. `""` switches it off |
 | `hold_ms` | how long the button must be held to count as speech rather than an ordinary middle-click |
+| `target_window` | optional substring of your terminal title, if several terminals are open. Empty is fine: Edgar uses the only terminal that qualifies, and **refuses to guess** if more than one does |
 
 After changing the voice, the mode or `ack_phrase`, re-render the acknowledgement:
 
@@ -113,16 +114,27 @@ A first-match rule scored 24/34; this scores 33/34. The failure mode of the naiv
 version is worth knowing: one negative word anywhere turns a whole paragraph angry,
 so *"a backup that doesn't parse is worse than none"* reads as rage.
 
-## Known limits
-
 - **Windows only.** The talk button, the task scheduling, the console injection and
   the audio device selection are all Win32.
 - **CPU only.** `small.en` transcribes a 3-second phrase in about 1.5 s on a modern
   desktop. There is no GPU path.
 - The face needs a monitor it can have to itself. On a single screen, run
   `scripts\edgar.py --windowed` or use `paky` mode.
-- Scheduled tasks are registered with **highest privileges**, because typing into an
-  elevated terminal requires it.
+## Privileges
+
+The tasks are registered with **least privilege** by default. Pass `--elevated` only if your
+Claude Code terminal is itself elevated, because Windows refuses input sent to a
+higher-privilege window. Be aware of the trade: the interpreter those tasks run lives in a
+directory you can write to, so anything able to write there would then run elevated without a
+prompt. If you need elevation, consider installing under a directory only administrators can
+write to.
+
+Edgar types into a terminal window, and will only do so when the window is owned by a terminal
+host process. A title alone is not trusted - any window can call itself anything - and if more
+than one window qualifies, Edgar refuses and leaves the text on your clipboard instead.
+
+## Known limits
+
 
 ## Licence
 

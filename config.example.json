@@ -1,15 +1,19 @@
 {
   "name": "Sam",
-
-  "mic_prefs": ["buds", "webcam", "speakerphone"],
-  "out_prefs": ["buds", "speakerphone"],
-
+  "mic_prefs": [
+    "buds",
+    "webcam",
+    "speakerphone"
+  ],
+  "out_prefs": [
+    "buds",
+    "speakerphone"
+  ],
   "model": "small.en",
-
   "vocab_hint": "Sam is talking to Edgar about a Windows PC. He may mention Edgar, Kokoro, Whisper, WASAPI, NVMe, push to talk and the daemon. He talks about drive C, drive D and drive E, and he often says save it, check it, reboot and voice recognition.",
-
   "mode": "edgar",
   "monitor": "left",
   "ack_phrase": "ok",
-  "hold_ms": 400
+  "hold_ms": 400,
+  "target_window": ""
 }

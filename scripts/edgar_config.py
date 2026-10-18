@@ -48,6 +48,12 @@ DEFAULTS = {
     # without waiting for the transcription. "" switches it off.
     "ack_phrase": "ok",
 
+    # An optional substring of your terminal's title, if you have several
+    # terminals open and want Edgar to type into a particular one. Empty is
+    # fine: Edgar will use the only terminal that qualifies, and refuse to
+    # guess if more than one does.
+    "target_window": "",
+
     # Hold the middle mouse button at least this long for it to count as speech
     # rather than an ordinary middle-click.
     "hold_ms": 400,
