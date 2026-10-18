@@ -304,6 +304,15 @@ _UNITS = [
     (r"\bms\b", "milliseconds"),
     (r"(?<=\d)\s*s\b", " seconds"),
     (r"\bC\b(?=\s|$)", "degrees"),
+    # Symbols that reach Kokoro as raw characters and are simply dropped,
+    # so "a 4.7% spread" was spoken as "a four point seven spread" and
+    # "2232 -> 2211" lost the arrow altogether. These four are the ones
+    # that actually turn up in what gets said. They must stay AHEAD of the
+    # number conversion below, which would otherwise consume the digits.
+    (r"(?<=\d)\s*%", " percent"),
+    (r"\s*(?:\u2192|->)\s*", " to "),
+    (r"(?<=\d)\s*\u00d7\s*", " times "),
+    (r"(?<![\w])~(?=\d)", "about "),
 ]
 
 _WORDS = {
@@ -856,9 +865,19 @@ def speak(say, emotion=None):
             robot = dict(robot)                 # per-line copy, never mutate MODES
             robot["pitch"] = em["pitch"]
             robot["ring"] = em["ring"]
-        # Slow the synthesis by the pitch factor so raising the pitch afterwards
-        # restores the original pace instead of making him gabble.
-        gen_speed = (em["speed"] / robot["pitch"]) if robot else cfg["speed"]
+        if robot:
+            # Slow the synthesis by the pitch factor so raising the pitch
+            # afterwards restores the original pace instead of making him gabble.
+            gen_speed = em["speed"] / robot["pitch"]
+        else:
+            # paky has no robot chain, so the emotion's pitch and ring have
+            # nowhere to go and there is no face either - which left an angry
+            # line and a happy one acoustically IDENTICAL. Tempo is the one
+            # dimension a plain voice still has, so the emotion goes there.
+            # Expressed relative to neutral, so an ordinary line keeps exactly
+            # the configured speed even if that setting changes later.
+            gen_speed = (cfg["speed"] * em["speed"]
+                         / EMOTIONS[DEFAULT_EMOTION]["speed"])
         log("  emotion=%s  pitch=%.2f" % (emo, robot["pitch"] if robot else 1.0))
         samples, rate = kok.create(spoken_text, voice=cfg["voice"], speed=gen_speed,
                                    lang="en-us",
