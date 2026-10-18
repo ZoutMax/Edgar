@@ -237,6 +237,24 @@ def register_tasks(py, home, monitor, elevated):
             say("registered %s" % name)
 
 
+def _mentions(obj, needle):
+    """Does any STRING inside this structure mention `needle`?
+
+    Deliberately NOT `needle in json.dumps(obj)`: json.dumps escapes every
+    backslash, so a Windows path written with single separators never matches
+    its own doubled form in the dump. With that test the "already present"
+    check never fired, and every re-run of this installer appended another
+    copy of all three hooks.
+    """
+    if isinstance(obj, str):
+        return needle in obj.lower()
+    if isinstance(obj, dict):
+        return any(_mentions(v, needle) for v in obj.values())
+    if isinstance(obj, (list, tuple)):
+        return any(_mentions(v, needle) for v in obj)
+    return False
+
+
 def patch_hooks(py, home):
     settings = os.path.join(os.path.expanduser("~"), ".claude", "settings.json")
     if not os.path.exists(settings):
@@ -253,7 +271,7 @@ def patch_hooks(py, home):
     for event, matcher, extra, timeout, status in HOOKS:
         entries = hooks.setdefault(event, [])
         script = os.path.join(SCRIPTS, extra[0])
-        if any(script in json.dumps(entry) for entry in entries):
+        if any(_mentions(entry, script.lower()) for entry in entries):
             continue
         entry = {"hooks": [{"type": "command",
                             "command": py,

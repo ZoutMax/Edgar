@@ -19,7 +19,7 @@ Everything runs **offline and local** — no speech leaves the machine.
 
 - Windows 10 or 11
 - Python 3.10+ (3.12 recommended)
-- About 1.5 GB of disk: 340 MB of voice model, ~250 MB of speech model, the rest venv
+- About 1 GB of disk. Measured at **770 MB** right after installing (354 MB of voice model plus the virtual environment), and the ~250 MB speech model downloads the first time you hold the button
 - A mouse with a middle button
 - Claude Code, if you want the hooks (Edgar works without it, just with less to say)
 

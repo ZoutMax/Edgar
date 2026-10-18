@@ -39,6 +39,25 @@ def remove_tasks():
             say("%s was not registered" % name)
 
 
+def _mentions(obj, needle):
+    """Does any STRING inside this structure mention `needle`?
+
+    Deliberately NOT `needle in json.dumps(obj)`: json.dumps escapes every
+    backslash, so a Windows path with single separators never matches its own
+    doubled form in the dump. That is how this function came to report "no
+    Edgar hooks were in settings.json" while leaving all three behind -
+    pointing at scripts that --all then deleted, so Claude Code would try to
+    run them on every session.
+    """
+    if isinstance(obj, str):
+        return needle in obj.lower()
+    if isinstance(obj, dict):
+        return any(_mentions(v, needle) for v in obj.values())
+    if isinstance(obj, (list, tuple)):
+        return any(_mentions(v, needle) for v in obj)
+    return False
+
+
 def remove_hooks():
     settings = os.path.join(os.path.expanduser("~"), ".claude", "settings.json")
     if not os.path.exists(settings):
@@ -53,7 +72,7 @@ def remove_hooks():
         for entry in hooks[event]:
             # Only Edgar's own entries, identified by the scripts directory -
             # never anything else the user has configured.
-            if SCRIPTS.lower() in json.dumps(entry).lower():
+            if _mentions(entry, SCRIPTS.lower()):
                 removed += 1
             else:
                 kept.append(entry)
