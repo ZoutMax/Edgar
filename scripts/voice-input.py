@@ -93,7 +93,7 @@ KEEP_WAV_COUNT = 10        # keep a rolling history, so a bad transcription can 
 
 TALKING_FLAG = os.path.join(HOME, ".user-talking")   # exists while the button is held
 
-# Played the instant the button is released, so the user knows he was heard
+# Played the instant the button is released, so the user knows they were heard
 # without waiting for the transcription. A PRE-RENDERED file, not live
 # synthesis - see say_ack(). Set ACK_ENABLED False to switch it off; the
 # beeps are separate and stay either way.
@@ -570,7 +570,7 @@ def find_window(substr):
 # the console input buffer. No SetForegroundWindow, so Windows cannot refuse it
 # and flash the taskbar - which is exactly what it did when the user was working in
 # another window. It also means text arrives while the terminal is in the
-# background, instead of the terminal being yanked in front of him.
+# background, instead of the terminal being yanked in front of them.
 
 
 class COORD(ctypes.Structure):
@@ -750,9 +750,8 @@ def _load_ack(path):
 def _wake_edgar(env, text):
     """Show the face for the acknowledgement too.
 
-    The user, 2026-10-18: *"when say ok edgar not show op"*. Playing a wav from here
-    bypasses the daemon, so nothing was writing edgar-state.json and Edgar stayed
-    hidden through his own acknowledgement.
+    Playing a wav from here bypasses the daemon, so nothing was writing
+    edgar-state.json and Edgar stayed hidden through his own acknowledgement.
 
     Same schema speak-bullets.py writes, and written the same way - temp file plus
     os.replace - because Edgar reads it at 50 fps and must never see half a file.
@@ -793,12 +792,11 @@ def _wake_edgar(env, text):
 def say_ack(out_idx):
     """Play the pre-rendered acknowledgement, on RELEASE of the button.
 
-    The user, 2026-10-18: *"i did no hear ok jus save a mp3 and play it mabe more
-    easy ?"* - the daemon round trip logged itself as spoken and still was not
-    audible, and it needed Kokoro, a socket and over a second for one word.
+    The daemon round trip logged itself as spoken and still was not audible, and
+    it needed Kokoro, a socket and over a second for one word.
 
     A file removes all of that. It goes out through the SAME `sd.play` path as the
-    beeps, which are known to reach him, and it does NOT wait: the word carries on
+    beeps, which are known to reach them, and it does NOT wait: the word carries on
     while Whisper transcribes, so it adds no latency at all.
 
     Regenerate with make-ack.py after changing the phrase, the voice or the mode.
@@ -997,11 +995,10 @@ def main():
                 except Exception:
                     pass
 
-                # The user wants it the instant he lets go, not when the transcription
-                # lands: "releasing the mouse button must trigger the ok just easy as
-                # this". Fired HERE, once the stream is closed - any earlier and the
-                # 350 ms tail would record Edgar saying it and Whisper would
-                # transcribe his own voice back into the prompt.
+                # The user wants it the instant they let go, not when the
+                # transcription lands. Fired HERE, once the stream is closed - any
+                # earlier and the 350 ms tail would record Edgar saying it, and
+                # Whisper would transcribe his own voice back into the prompt.
                 lead_ms = (first_audio[0] - down_since) * 1000 if first_audio[0] else None
                 down_since = None
                 beeped = False
@@ -1040,7 +1037,7 @@ def main():
                     log("resampled %d -> %d Hz (%d:%d)"
                         % (mic_rate, SAMPLE_RATE, mic_rate // g, SAMPLE_RATE // g), echo)
 
-                # The Buds4 mic arrives around 0.009 peak - roughly 40 dB below what
+                # A Bluetooth headset mic arrives around 0.009 peak - some 40 dB under what
                 # Whisper was trained on, which leaves its mel spectrogram sitting in
                 # the noise floor. Normalising the peak is the single biggest accuracy
                 # win available here and costs nothing.

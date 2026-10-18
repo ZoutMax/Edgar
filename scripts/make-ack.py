@@ -1,6 +1,5 @@
 """Render the spoken acknowledgement ONCE to a wav the listener can just play.
 
-The user, 2026-10-18: *"i did no hear ok jus save a mp3 and play it mabe more easy ?"*
 The daemon round trip logged itself as spoken and was still not audible, and it
 needed Kokoro, a socket and ~1.3 s for one word. A file costs nothing: the
 listener plays it on the SAME device and the SAME code path as the beeps, which

@@ -118,7 +118,7 @@ HIDE_AFTER_S = 1.4         # linger after speech so he does not flicker between 
 # 1.16). Across the stills: smile = 0.194 x eyegap, frown = 0.375 x eyegap, so
 # THE FROWN IS ABOUT TWICE AS DEEP AS THE SMILE. Converted to a fraction of the
 # face-box height via eyegap = 2 x EYE_DX and the 1.19 aspect.
-# A LADDER, not three buckets - The user: "there are more than 3".
+# A LADDER, not three buckets - there are more than three distinct shapes.
 # Depths are measured against the EYE GAP, which is crop-proof (some stills crop
 # the screen short, which corrupts any fraction-of-screen measurement).
 # Measured solidly: smile +0.194 (13,14,17), frown -0.319 (12,16),
@@ -127,7 +127,7 @@ HIDE_AFTER_S = 1.4         # linger after speech so he does not flicker between 
 # and w = 1.19 h, so eyegap = 0.376 h.
 # The mouths are TRACED from the user's pictures, not generated from a curve.
 # Each point is (x, y) in EYE-GAP units: x from the mouth's own centre, y BELOW
-# THE EYE LINE. So every mouth is placed by the eyes, exactly as he asked, and
+# THE EYE LINE. So every mouth is placed by the eyes, as intended, and
 # no sine/depth parameter can distort the shape.  scratchpad/trace_mouths.py
 # The mouth OUTLINES, copied out of the user's pictures - not drawn. Each is a
 # closed polygon: the stroke's top edge left-to-right, then its bottom edge

@@ -2,7 +2,7 @@
 
 Every hook run was a fresh Python process re-reading the 310 MB Kokoro model
 from disk - about 4 s from the line appearing to the first word, by which time
-The user had already started talking.
+the user had already started talking.
 
 This holds the model in memory and does the speaking on request. The hooks
 become thin clients: they hand over the lines and exit. If the daemon is not
@@ -129,7 +129,7 @@ def main():
     log("listening on %s:%d" % (HOST, PORT))
 
     # Load the model NOW rather than on the first request, so the first thing
-    # The user hears is as quick as the rest.
+    # the user hears is as quick as the rest.
     t0 = time.time()
     try:
         sb.get_kokoro()

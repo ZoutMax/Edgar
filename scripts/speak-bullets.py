@@ -45,7 +45,7 @@ WAIT_SECONDS = 30.0
 # Measured 2026-10-17: the final message lands within ~1 s of the hook firing, so a 3 s
 # settle was ~2 s of pure waiting - half the total delay before the first word. 1.2 s is
 # still 6x the poll interval, and .speak-last-uuid stops a mis-grab repeating.
-SETTLE_SECONDS = 0.6    # was 1.2. The user: the voice arrives too late and he has
+SETTLE_SECONDS = 0.6    # was 1.2. The voice arrived too late and the user had
                         # started talking by then. The final message lands within
                         # ~1 s, so 0.6 still settles it while halving the wait.
 POLL_SECONDS = 0.2
@@ -94,13 +94,13 @@ GAIN_BOOST = 1.0        # The user's pick 2026-10-17 after 2.0 / 1.4 / 1.2 / 1.0
 BULLET = "\u2022"
 
 # Reading a whole reply aloud took 130 s for something the user reads in ~20 s -
-# an audiobook trailing behind him, not a conversation. So:
+# an audiobook trailing behind them, not a conversation. So:
 #   * if the reply contains white-dot lines, speak ONLY those - they are the
 #     deliberately-spoken version, written as speech rather than as a document;
 #   * otherwise fall back to the opening prose, capped short, so a reply that
 #     forgot its spoken lines still says something useful.
-# The user, 2026-10-17: "when you give back the prompt talk a small resume of
-# what you did". So: a short spoken summary at the end of the turn, nothing more.
+# The requirement: when the prompt is handed back, say a short summary of what
+# was done. So: one brief spoken summary at the end of a turn, nothing more.
 MAX_TOTAL = 1800        # ceiling for the prose fallback
 SPOKEN_CAP = 420        # ~25 s at SPEED - a resume, not a reading
 SPOKEN_LINES = 2        # at most two sentences
@@ -121,7 +121,7 @@ LOCK_STALE = 120.0      # a crashed run must not mute speech forever
 
 # The user holds the middle mouse button to talk. voice-input.py raises this flag
 # the instant the button goes down, and Edgar must then STOP - mid-word if need
-# be. Speaking over him is worse than not finishing the sentence.
+# be. Speaking over them is worse than not finishing the sentence.
 TALKING_FLAG = os.path.join(HOME, ".user-talking")
 TALK_POLL = 0.05        # how often to check while playing
 
@@ -512,7 +512,7 @@ MODE_FILE = os.path.join(HOME, "voice-mode.txt")
 DEFAULT_MODE = "edgar"
 
 # Edgar's voice is am_puck (the user picked it from 9) through the "little robot"
-# chain (his option 3 of 4). The point is that no RAW voice can sound like Edgar -
+# chain. The point is that no RAW voice can sound like Edgar -
 # he is a man through 1984 processing, so the machine goes on top:
 #   pitch 1.10  smaller, and the synthesis is slowed by the same factor so the
 #               resample that raises the pitch leaves the DURATION unchanged
@@ -617,7 +617,7 @@ EMOTIONS = {
     "neutral": {"pitch": 1.10, "speed": 0.92, "ring": (72.0, 0.21), "face": "neutral"},
     "happy":   {"pitch": 1.16, "speed": 0.98, "ring": (68.0, 0.17), "face": "happy"},
 }
-DEFAULT_EMOTION = "neutral"      # The user: "default is this" (the smiling still)
+DEFAULT_EMOTION = "neutral"      # the smiling still from the film
 
 
 # The top of the ladder is for a real result, not routine good news.
@@ -770,7 +770,7 @@ def speak(say, emotion=None):
 
     if not candidates:
         # Deliberately NOT device=None: the system default is the monitor, and
-        # The user wants speech on the headset or the speakerphone, never there.
+        # the user wants speech on the headset or the speakerphone, never there.
         log("no usable output device among %s - saying nothing" % (DEVICE_PREFS,))
         return 0
 
@@ -832,7 +832,7 @@ def speak(say, emotion=None):
         for n, (cand_idx, cand_dev, cand_api) in enumerate(candidates):
             # `samples` has ALREADY been upsampled to out_rate. Handing that
             # same array to a non-WASAPI device at the ORIGINAL 24000 played it
-            # at half speed - The user: "you talk slow now". The rate must always
+            # at half speed, which sounds sluggish. The rate must always
             # match the data, whichever device ends up playing it.
             play_rate, play_samples = out_rate, samples
             try:
