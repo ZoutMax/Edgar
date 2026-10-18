@@ -1,0 +1,5 @@
+# Open items Edgar may mention when greeting you.
+# One per line, written AS SPEECH - it gets read aloud, so no paths or jargon.
+# Lines starting with # are ignored. Delete a line once it is done.
+The backup drive still has not been swapped.
+Those photos are still waiting to be sorted.
