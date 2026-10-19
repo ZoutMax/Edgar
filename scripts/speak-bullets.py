@@ -175,15 +175,17 @@ def log(msg):
         pass
 
 
-def newest_assistant(path):
-    """(uuid, text) of the newest assistant text message, or (None, None)."""
-    if not path or not os.path.exists(path):
-        return None, None
-    try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            lines = f.read().splitlines()
-    except Exception:
-        return None, None
+# The transcript is append-only and the message we want is always at the END,
+# so reading all of it is waste that grows without limit. Measured on the live
+# session at 190 MB: decode 1.09 s + splitlines 0.35 s = 1.44 s of the 2.0 s
+# live budget, while the scan itself costs 0.01 s. Past roughly 265 MB the live
+# narration would have stopped for good - no error, no crash, just "nothing new
+# within 2.0s" on every fire. 4 MB holds thousands of records.
+TAIL_BYTES = 4 * 1024 * 1024
+
+
+def _newest_in(lines):
+    """(uuid, text) of the newest assistant text message among these lines."""
     for line in reversed(lines):
         s = line.strip()
         if not s.startswith("{"):
@@ -199,6 +201,31 @@ def newest_assistant(path):
         if parts:
             return o.get("uuid"), "\n".join(parts)
     return None, None
+
+
+def newest_assistant(path):
+    """(uuid, text) of the newest assistant text message, or (None, None)."""
+    if not path or not os.path.exists(path):
+        return None, None
+    try:
+        size = os.path.getsize(path)
+        with open(path, "rb") as f:
+            if size > TAIL_BYTES:
+                f.seek(size - TAIL_BYTES)
+                f.readline()        # drop the partial line we landed inside
+            lines = f.read().decode("utf-8", "replace").splitlines()
+    except Exception:
+        return None, None
+    uuid, text = _newest_in(lines)
+    if uuid or size <= TAIL_BYTES:
+        return uuid, text
+    # Nothing in the tail - a long run of tool calls with no prose at all.
+    # Pay for the whole file this once rather than go quiet.
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return _newest_in(f.read().splitlines())
+    except Exception:
+        return None, None
 
 
 def acquire_lock(wait_s):
