@@ -350,6 +350,9 @@ def main():
     say("  schtasks /run /tn Edgar-Face")
     say("  schtasks /run /tn Edgar-Voice-Input")
     say("Then hold the MIDDLE MOUSE BUTTON, wait for the beep, speak, release.")
+    print()
+    say("If anything is not working:")
+    say("  python %s" % os.path.join(SCRIPTS, "doctor.py"))
     return 0
 
 
