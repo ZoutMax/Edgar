@@ -167,7 +167,25 @@ def user_is_talking():
     return os.path.exists(TALKING_FLAG)
 
 
+MAX_LOG = 2 * 1024 * 1024       # rotate past this, keeping one older generation
+
+
+def _rotate_log(path):
+    """Keep a log bounded. Nothing pruned these before: measured 2026-10-19,
+    speak-bullets.log had reached 644 KB and voice-input.log 100 KB on two days
+    of ordinary use, with no ceiling anywhere in either script. One previous
+    generation is kept, which has always been enough to tell "never fired" from
+    "fired and found nothing"."""
+    try:
+        if os.path.getsize(path) < MAX_LOG:
+            return
+        os.replace(path, path + ".1")   # atomic, so a concurrent writer is safe
+    except OSError:
+        pass
+
+
 def log(msg):
+    _rotate_log(LOG)
     try:
         with open(LOG, "a", encoding="utf-8") as f:
             f.write("%s  %s\n" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3], msg))
@@ -697,14 +715,51 @@ DEFAULT_EMOTION = "neutral"      # the smiling still from the film
 # improvement ("The oval is gone, now there is one shape") both read as grief.
 # Measured on real traffic, that list produced 16 sad lines of which 10 were
 # wrong. Narrowed, it produces 6, and they are the earbuds going flat.
+# Only 6 of 605 lines Edgar had actually spoken ever reached the sad face,
+# because this wanted exact phrases: "dropped off", "lost the connection",
+# "unreachable" and "went dark" all went past it. The additions below are
+# narrow on purpose - each one can only describe something being GONE, never a
+# bug being fixed - and adding them moved none of those 605 lines, so they cost
+# nothing and only widen what they were meant to catch.
 _SAD = re.compile(
-    "(?<![A-Za-z])(went offline|is offline|dropped out|disconnect(ed|s|ing)?|"
-    "gone to sleep|lost track|out of range|unavailable|stopped answering|"
-    "no longer responding|timed? ?out|stopped working)(?![A-Za-z])", re.I)
+    "(?<![A-Za-z])(went offline|is offline|dropped out|dropped off|"
+    "disconnect(ed|s|ing)?|gone to sleep|lost track|out of range|unavailable|"
+    "stopped answering|no longer responding|timed? ?out|stopped working|"
+    "stopped responding|lost (the )?connection|connection (is |was )?lost|"
+    "went dark|unreachable|not reachable)(?![A-Za-z])", re.I)
+
+
+# Narration of work UNDERWAY. The fault named in such a sentence is the subject
+# being worked on, not a report that something is failing now - "running a pass
+# over the failure modes" is a plan, and it was coming out of Edgar's mouth as
+# a scowl. Anchored at the start of the sentence, because that is where this
+# shape lives; a work verb buried later must not qualify.
+_PROCEDURAL = re.compile(
+    r"^(?:(?:now|first|next|then|also|so|and|still)\s+)?"
+    r"(?:re-?)?(?:checking|verifying|proving|testing|measuring|running|"
+    r"looking|auditing|comparing|counting|timing|tracing|reading|scanning|"
+    r"probing|watching|inspecting|diffing|profiling|sampling)\b", re.I)
+
+# ...but only while it IS still underway. "Running the test showed my patch was
+# wrong" opens exactly the same way and reports a real failure, so a verb that
+# delivers an outcome cancels rule 6. Without this guard the rule excused that
+# line, which is a fault of mine arriving as a shrug.
+_OUTCOME = re.compile(
+    r"\b(showed|shows|revealed|reveals|turned out|turns out|found|finds|"
+    r"caused|causes|broke|left|means|meant|came back|exposed)\b", re.I)
+
+# TRIED AND REVERTED 2026-10-19: teaching _UNHAPPY the words dead, stale,
+# orphan, leak and garbage, so that "reported success while leaving three dead
+# hooks" could not arrive cheerful. It scored well on invented lines and
+# REGRESSED FOUR REAL ONES - "_DELIGHTED is dead code" (an observation), "it
+# found a real brand leak" (the checker working), "stale device information"
+# (already fixed), "two stale lines ... cleaning them up". Those words are too
+# weak to carry anger on their own. The gap is real but unproven in traffic:
+# do not re-add them without a line Edgar has actually said.
 
 
 def emotion_for(text):
-    """The emotion of a line, from five rules and nothing more.
+    """The emotion of a line, from six rules and nothing more.
 
     MEASURED, on 45 hand-labelled lines drawn from what Edgar has actually
     said - not on invented examples. The previous version scored 49% on that
@@ -727,6 +782,12 @@ def emotion_for(text):
        negative immediately followed by "before" or "last night" is history.
     5. A sentence that EXPLAINS a risk carries no sentiment at all:
        "if the hook dies the button stops working" is narration, not a failure.
+    6. A sentence that OPENS with work underway - "Checking...", "Running a
+       full pass over the failure modes" - is narration too, unless it also
+       delivers an outcome ("Running the test SHOWED my patch was wrong").
+       Added 2026-10-19 from real traffic: 9 more hand-labelled lines right,
+       none broken, and of 605 lines Edgar had already spoken exactly four
+       changed - every one of them a scowl that should never have been there.
 
     Quotations are blanked before any of this, so log output and rule names
     cannot speak for Edgar.
@@ -754,6 +815,8 @@ def emotion_for(text):
                 tok = m.group(0)
         if _HISTORIC.search(sentence[pos + len(tok):pos + len(tok) + 45]):
             return "neutral"            # it WAS broken; that is not now
+        if _PROCEDURAL.match(sentence.strip()) and not _OUTCOME.search(sentence):
+            return "neutral"            # work underway; the fault is its topic
         return "angry"
     return DEFAULT_EMOTION
 

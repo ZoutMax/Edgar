@@ -213,6 +213,16 @@ user32.GetAncestor.argtypes = (wt.HWND, ctypes.c_uint)
 user32.GetAncestor.restype = wt.HWND
 user32.GetMessageW.argtypes = (ctypes.POINTER(wt.MSG), wt.HWND, wt.UINT, wt.UINT)
 
+# GetForegroundWindow returns an HWND too. Undeclared it arrives as a 32-bit
+# SIGNED int, so the focus check in type_text ("got != hwnd") can compare a
+# negative int against a full-width handle and report a focus failure that
+# never happened - then refuse to type what was just dictated. Window handles
+# have stayed small enough on this machine for it never to fire, which is
+# exactly how this class of fault waits.
+user32.GetForegroundWindow.restype = wt.HWND
+user32.GetWindowThreadProcessId.argtypes = (wt.HWND, ctypes.POINTER(wt.DWORD))
+user32.GetWindowThreadProcessId.restype = wt.DWORD
+
 _MB_DOWN = False         # driven by the hook: a SWALLOWED click never reaches GetAsyncKeyState
 _HOOK_SEEN = 0.0         # stamped by the hook on every event, to prove it is still delivering
 _HOOK_HANDLE = None      # so a dead hook can be retired before a new one goes in
@@ -287,23 +297,54 @@ def start_mouse_hook():
     return _HOOK_ALIVE
 
 
+_HOOK_BLIND = [0.0]      # last time the hook was caught not delivering a press
+
+
 def mb_pressed():
     """The hook is authoritative - a swallowed click is invisible to GetAsyncKeyState.
 
     If the hook could not be installed we fall back to polling, which still talks;
     it just cannot stop the click reaching the taskbar.
+
+    One exception, and it is the one that has actually been felt. Windows drops
+    a low-level hook that overruns LowLevelHooksTimeout and tells nobody:
+    _MB_DOWN then stays False for ever and the button does nothing at all. The
+    log shows that happening THREE times in fourteen hours on 2026-10-19.
+    watch_hook() does catch it - but only on the idle scan, every
+    DEVICE_POLL_S seconds, and only once the CURSOR has moved between two
+    samples. A press made before that noticed was simply eaten, with nothing in
+    the log and no beep: "pressed nothing happened seems stuck".
+
+    A live hook sees every event BEFORE any app does, so it has already stamped
+    _MB_DOWN by the time the OS would admit the button is down. "The OS says
+    down while the hook saw nothing" therefore means the hook is gone. So
+    believe the OS, honour the press, and put the hook back - at most one
+    complaint and one attempt a minute, because a held button asks 100 times a
+    second.
     """
-    if _HOOK_ALIVE:
-        return _MB_DOWN
-    return (user32.GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0
+    if not _HOOK_ALIVE:
+        return (user32.GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0
+    if _MB_DOWN:
+        return True
+    if (user32.GetAsyncKeyState(VK_MBUTTON) & 0x8000) == 0:
+        return False
+    if time.time() - _HOOK_BLIND[0] >= HOOK_REINSTALL_EVERY_S:
+        _HOOK_BLIND[0] = time.time()
+        log("the button is DOWN but the hook never saw it - Windows has "
+            "dropped it; honouring the press and putting it back", True)
+        watch_hook(force=True)
+    return True
 
 
 _HOOK_WATCH = [None, 0.0, 0.0]   # last cursor position, last heartbeat, last reinstall
 HOOK_REINSTALL_EVERY_S = 60.0    # never thrash: at most one attempt a minute
 
 
-def watch_hook():
+def watch_hook(force=False):
     """Put the hook back if it has silently stopped delivering.
+
+    `force` skips the movement test, for the one caller that already has proof:
+    mb_pressed() sees the OS reporting a button the hook never reported.
 
     Windows removes a low-level hook that overruns `LowLevelHooksTimeout`
     without telling anyone. `_MB_DOWN` would then be frozen False for ever and
@@ -329,12 +370,14 @@ def watch_hook():
     moved = _HOOK_WATCH[0] is not None and here != _HOOK_WATCH[0]
     quiet = _HOOK_SEEN <= _HOOK_WATCH[1]
     _HOOK_WATCH[0], _HOOK_WATCH[1] = here, _HOOK_SEEN
-    if not (moved and quiet):
+    if not force and not (moved and quiet):
         return True
     if time.time() - _HOOK_WATCH[2] < HOOK_REINSTALL_EVERY_S:
         return True
     _HOOK_WATCH[2] = time.time()
-    log("mouse hook saw no event while the cursor moved - reinstalling", True)
+    log("mouse hook %s - reinstalling"
+        % ("is being replaced on proof it is dead" if force
+           else "saw no event while the cursor moved"), True)
     try:
         if _HOOK_HANDLE:
             user32.UnhookWindowsHookEx(_HOOK_HANDLE)
@@ -411,8 +454,26 @@ def is_elevated():
 
 
 
+MAX_LOG = 2 * 1024 * 1024       # rotate past this, keeping one older generation
+
+
+def _rotate_log(path):
+    """Keep a log bounded. Nothing pruned these before: measured 2026-10-19,
+    speak-bullets.log had reached 644 KB and voice-input.log 100 KB on two days
+    of ordinary use, with no ceiling anywhere in either script. One previous
+    generation is kept, which has always been enough to tell "never fired" from
+    "fired and found nothing"."""
+    try:
+        if os.path.getsize(path) < MAX_LOG:
+            return
+        os.replace(path, path + ".1")   # atomic, so a concurrent writer is safe
+    except OSError:
+        pass
+
+
 def log(msg, echo=False):
     line = "%s  %s" % (datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3], msg)
+    _rotate_log(LOG)
     try:
         with open(LOG, "a", encoding="utf-8") as f:
             f.write(line + "\n")
