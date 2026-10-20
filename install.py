@@ -116,6 +116,17 @@ def preflight():
     if sys.version_info < (3, 10):
         sys.exit("Python 3.10 or newer is needed; this is %d.%d"
                  % sys.version_info[:2])
+    # Not a hard stop - a newer Python may well work. But the pins in
+    # requirements.txt are the set known to work together, and the binary
+    # wheels they depend on (onnxruntime, ctranslate2) lag a new Python
+    # release by months. Without this line, that arrives as a wall of
+    # compiler output from pip and no clue what to do about it.
+    if sys.version_info >= (3, 13):
+        say("WARNING: this is Python %d.%d. Edgar is pinned to the versions "
+            "known to work on 3.12, and the speech and voice wheels often "
+            "have no build for a brand-new Python yet." % sys.version_info[:2])
+        say("         If the install below fails while building a wheel, "
+            "install Python 3.12 and run this again with it.")
     if not os.path.isdir(SCRIPTS):
         sys.exit("scripts/ is missing - run this from inside the checkout.")
 

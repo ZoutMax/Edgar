@@ -383,7 +383,13 @@ def _int_to_words(n):
     for div, name in ((1_000_000_000, "billion"), (1_000_000, "million"), (1000, "thousand")):
         if n >= div:
             head = _int_to_words(n // div) + " " + name
-            return head if n % div == 0 else head + " " + _int_to_words(n % div)
+            if n % div == 0:
+                return head
+            # "one thousand AND ninety eight", to match the hundreds branch
+            # above - but "fifty one thousand two hundred and forty seven",
+            # where the "and" belongs to the hundreds, not here.
+            joiner = " and " if n % div < 100 else " "
+            return head + joiner + _int_to_words(n % div)
     return str(n)
 
 
@@ -398,9 +404,30 @@ def speechify(text):
     """Rewrite written text into something that reads aloud naturally."""
     t = text
 
-    # file paths and URLs say nothing useful aloud - drop them
+    # file paths and URLs say nothing useful aloud - drop them. The second
+    # rule is a UNC share: the drive-letter rule above never matched
+    # \\server\share, so those were read out backslash by backslash.
     t = re.sub(r"[A-Za-z]:\\[^\s,;:]+", "a file path", t)
+    t = re.sub(r"\\\\[^\s,;:]+", "a file path", t)
     t = re.sub(r"https?://[^\s,;:]+", "a link", t)
+
+    # A file:line reference. The line number is noise aloud, and the integer
+    # rule below read "speak-bullets.py:1141" as "one thousand one hundred and
+    # forty one". Needs the dot, so a clock time like 21:30 is untouched.
+    t = re.sub(r"(\.[A-Za-z0-9]{1,4}):\d+(?=\D|$)", r"\1", t)
+
+    # Hex literals and commit hashes are pure noise aloud. Both hash rules
+    # demand at least one a-f AND at least one digit: without the letter,
+    # "1234567 events" became "a commit hash", and without the digit, ordinary
+    # words spelled only from a-f - "defaced", "effaced" - did too.
+    _HASH = r"(?=[0-9a-f]{7,40}\b)(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,40}"
+    t = re.sub(r"\b%s\.\.%s\b" % (_HASH, _HASH), "a commit range", t)
+    t = re.sub(r"\b%s\b" % _HASH, "a commit hash", t)
+    t = re.sub(r"\b0x[0-9A-Fa-f]+\b", "a hex code", t)
+
+    # A command-line switch reads as punctuation. "Use --quiet" becomes
+    # "Use the quiet switch", which is what a person would say out loud.
+    t = re.sub(r"(?<![\w-])--([a-z][a-z-]+)", r"the \1 switch", t)
 
     # SNAKE_CASE / snake_case identifiers -> spaced words
     t = re.sub(r"\b([A-Za-z]+(?:_[A-Za-z0-9]+)+)\b",
@@ -413,9 +440,29 @@ def speechify(text):
     # leading +/- on measurements reads as punctuation
     t = re.sub(r"(?<![\w])\+(?=\d)", "", t)
 
+    # A dotted version is NOT a decimal, and must go first. The decimal rule
+    # below consumed "1.2" and then read the orphaned ".1" as "nought point
+    # one", so "faster-whisper 1.2.1" came out "one point twonought point one".
+    t = re.sub(r"\b\d+(?:\.\d+){2,}\b",
+               lambda m: " point ".join(_int_to_words(int(p))
+                                        for p in m.group(0).split(".")), t)
+
+    # Comma-grouped thousands, also before the rules below: the bare-integer
+    # rule saw "1" and "098" as two separate numbers, so "1,098 events" was
+    # spoken as "one,ninety eight events".
+    t = re.sub(r"\b\d{1,3}(?:,\d{3})+\b",
+               lambda m: _int_to_words(int(m.group(0).replace(",", ""))), t)
+
     # decimals, then plain integers
     t = re.sub(r"\b(\d*)\.(\d+)\b", _decimal_to_words, t)
     t = re.sub(r"\b\d+\b", lambda m: _int_to_words(int(m.group(0))), t)
+
+    # The unit table above is plural, which is right except after a bare one:
+    # "1 MB" became "one megabytes". Only the exact "one" case is wrong -
+    # adjectival use ("a 4 MB tail") is left alone, because knowing the next
+    # word is a noun needs more than a regex.
+    t = re.sub(r"\bone (kilo|mega|giga|tera)bytes\b", r"one \1byte", t)
+    t = re.sub(r"\bone (milli)?seconds\b", r"one \1second", t)
 
     # tidy whitespace
     return re.sub(r"\s{2,}", " ", t).strip()

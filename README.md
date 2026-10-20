@@ -102,7 +102,9 @@ python scripts\make-ack.py --mode edgar
   second instead of four; without it the hooks still work, just slower.
 - **`speak-bullets.py`** picks the emotion, renders the audio, and hands the face an
   RMS envelope of exactly what is about to play — so the mouth moves with the real
-  waveform, not a random wiggle.
+  waveform, not a random wiggle. It also rewrites the line into something that reads
+  aloud: numbers and units become words, and file paths, URLs, commit hashes, hex codes
+  and `--switches` become the phrase a person would actually say.
 - **`edgar.py`** draws the face. The four mouths are **traced from film stills**, not
   generated, and the lips part from the expression's own curve, with the lower lip
   travelling about twice as far as the upper, because that is how a jaw works.
