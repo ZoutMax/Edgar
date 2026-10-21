@@ -302,6 +302,31 @@ def patch_hooks(py, home):
         say("the hooks are already in settings.json")
 
 
+def record_home(home):
+    r"""Tell the scripts where the runtime is, when it is not the default.
+
+    See _installed_home() in edgar_config.py. The tasks and the hooks carry no
+    environment of their own, so without this a --home install leaves every
+    script reading %LOCALAPPDATA%\Edgar: no config.json, no cue wavs, and no
+    sign that anything is wrong.
+    """
+    marker = os.path.join(SCRIPTS, ".edgar-home")
+    default = os.path.join(os.environ.get("LOCALAPPDATA")
+                           or os.path.expanduser("~"), "Edgar")
+    if (os.path.normcase(os.path.normpath(home))
+            == os.path.normcase(os.path.normpath(default))):
+        # A marker left by an earlier --home run would otherwise override the
+        # default location this run just chose.
+        if os.path.exists(marker):
+            os.remove(marker)
+            say("removed a stale runtime marker from an earlier --home install")
+        return
+    with open(marker, "w", encoding="utf-8") as f:
+        f.write(home)
+    written.append(marker)
+    say("recorded the runtime location for the scripts")
+
+
 def main():
     default_home = os.path.join(
         os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "Edgar")
@@ -335,6 +360,7 @@ def main():
     say("  state   : %s" % home)
     print()
     os.makedirs(home, exist_ok=True)
+    record_home(home)
     py = make_venv(home)
     fetch_models(home)
     write_config(home, name or "", args.monitor)

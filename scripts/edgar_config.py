@@ -13,8 +13,27 @@ stop the voice working.
 import json
 import os
 
-HOME = os.environ.get("EDGAR_HOME") or os.path.join(
-    os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "Edgar")
+def _installed_home():
+    r"""Where install.py put the runtime, if that was not the default.
+
+    install.py --home can put the venv, the models and config.json anywhere,
+    but nothing used to carry that choice to the scripts: the scheduled tasks
+    hold no environment, and Task Scheduler's XML has nowhere to put one. So
+    every script went on reading %LOCALAPPDATA%\Edgar, found no config and no
+    cue wavs, and fell back to the defaults in silence. The installer now
+    records the path here, beside the scripts it points the tasks at.
+    """
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               ".edgar-home"), encoding="utf-8") as f:
+            return f.read().strip() or None
+    except Exception:
+        return None
+
+
+HOME = (os.environ.get("EDGAR_HOME") or _installed_home()
+        or os.path.join(os.environ.get("LOCALAPPDATA")
+                        or os.path.expanduser("~"), "Edgar"))
 CONFIG_PATH = os.path.join(HOME, "config.json")
 
 DEFAULTS = {

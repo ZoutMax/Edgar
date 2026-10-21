@@ -90,8 +90,29 @@ def remove_hooks():
         say("no Edgar hooks were in settings.json")
 
 
+def _marker_home():
+    r"""The runtime location install.py recorded for a --home install.
+
+    Without this, `uninstall.py --all` after an `install.py --home` looked for
+    %LOCALAPPDATA%\Edgar, found nothing there, and left the runtime and its
+    340 MB of models behind without a word.
+    """
+    try:
+        with open(os.path.join(SCRIPTS, ".edgar-home"), encoding="utf-8") as f:
+            return f.read().strip() or None
+    except Exception:
+        return None
+
+
+def remove_marker():
+    marker = os.path.join(SCRIPTS, ".edgar-home")
+    if os.path.exists(marker):
+        os.remove(marker)
+        say("removed the runtime marker")
+
+
 def main():
-    default_home = os.path.join(
+    default_home = _marker_home() or os.path.join(
         os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "Edgar")
     ap = argparse.ArgumentParser()
     ap.add_argument("--home", default=default_home)
@@ -105,6 +126,7 @@ def main():
     remove_hooks()
 
     home = os.path.abspath(args.home)
+    remove_marker()
     if args.all:
         if os.path.isdir(home):
             shutil.rmtree(home, ignore_errors=True)

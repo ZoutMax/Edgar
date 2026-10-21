@@ -339,9 +339,22 @@ def check_logs():
             ok("%-18s %s%s" % (name, mb(size), rotated))
     try:
         import ctypes
+        # GetDiskFreeSpaceExW FAILS on a directory that does not exist, and
+        # leaves the counter at zero. Reported as it stood, that read "only
+        # 0.0 GB free where Edgar lives" on a volume with 48 GB on it - the one
+        # message certain to send someone off deleting files. So ask about the
+        # nearest directory that DOES exist, and if even that will not answer,
+        # say nothing rather than something false.
+        probe = os.path.abspath(HOME)
+        while not os.path.isdir(probe):
+            parent = os.path.dirname(probe)
+            if parent == probe:
+                break
+            probe = parent
         free = ctypes.c_ulonglong(0)
-        ctypes.windll.kernel32.GetDiskFreeSpaceExW(
-            ctypes.c_wchar_p(HOME), None, None, ctypes.byref(free))
+        if not ctypes.windll.kernel32.GetDiskFreeSpaceExW(
+                ctypes.c_wchar_p(probe), None, None, ctypes.byref(free)):
+            raise OSError("GetDiskFreeSpaceExW failed for %s" % probe)
         gb = free.value / (1024.0 ** 3)
         if gb < 1:
             fail("only %.1f GB free where Edgar lives" % gb,
@@ -352,7 +365,42 @@ def check_logs():
         pass
 
 
+def _reexec_in_venv():
+    r"""Re-run under Edgar's own interpreter, whichever one started us.
+
+    The README says `python scripts\doctor.py`, and for everyone that is the
+    SYSTEM python - where sounddevice and the rest were never installed. That
+    turned a healthy install into "sounddevice will not import: pip install -r
+    requirements.txt into the venv", which is advice someone would follow for
+    nothing. The only interpreter that can answer questions about Edgar's
+    packages is Edgar's own.
+
+    Comparing the two paths is also what ends the recursion: after the switch
+    sys.executable IS the venv, so the second run returns here immediately.
+    """
+    venv = os.path.join(HOME, "kokoro", "venv", "Scripts", "python.exe")
+    if not os.path.exists(venv):
+        return          # check_python() reports a missing venv properly
+    if (os.path.normcase(os.path.abspath(sys.executable))
+            == os.path.normcase(os.path.abspath(venv))):
+        return
+    if "--quiet" not in sys.argv:
+        print("  (switching to Edgar's own interpreter: %s)" % venv)
+        # execv REPLACES this process, and anything still in the stdout buffer
+        # dies with it - which is exactly what swallowed the line above the
+        # first time this ran.
+        sys.stdout.flush()
+    try:
+        os.execv(venv, [venv, "-I", os.path.abspath(__file__)] + sys.argv[1:])
+    except OSError as exc:
+        # A venv that exists but will not start is itself worth reporting,
+        # and the checks below still say something useful.
+        warn("could not switch to the venv interpreter: %s" % exc,
+             "the checks below ran on %s instead" % sys.executable)
+
+
 def main():
+    _reexec_in_venv()
     ap = argparse.ArgumentParser(description="Edgar's self-check")
     ap.add_argument("--quiet", action="store_true",
                     help="print only problems")
